@@ -4,6 +4,26 @@ All notable changes to this plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.4] — 2026-04-26
+
+### Added
+
+- **`unhandledRejection` and `uncaughtException` handlers**. The server
+  now logs unhandled errors instead of dying silently, matching the
+  pattern used by the telegram channel plugin.
+- **`SIGHUP` shutdown handler**.
+- **Orphan watchdog** that polls every 5 s for parent-PID change or a
+  destroyed/ended stdin pipe and self-terminates. Catches the case where
+  Claude Code dies hard without sending SIGTERM (the existing PID
+  lockfile only handles new sessions; the watchdog handles long
+  idle gaps where no new session arrives).
+
+### Changed
+
+- `plugin.json` description and keywords trimmed to match the telegram
+  pattern. Marketing copy moved to the README.
+- README "About" section reduced to a neutral "Maintainer" line.
+
 ## [0.1.3] — 2026-04-26
 
 ### Removed

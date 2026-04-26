@@ -44,6 +44,15 @@ const SELF_PHONE = (process.env.WHATSAPP_SELF_PHONE ?? '').replace(/\D/g, '')
 // and only this sender can answer them. Keep empty to disable permission relay.
 const PERMISSION_TARGET = (process.env.WHATSAPP_PERMISSION_TARGET ?? '').replace(/\D/g, '')
 
+// Last-resort safety net — without these the process dies silently on any
+// unhandled promise rejection. With them it logs and keeps serving tools.
+process.on('unhandledRejection', err => {
+  process.stderr.write(`whatsapp channel: unhandled rejection: ${err}\n`)
+})
+process.on('uncaughtException', err => {
+  process.stderr.write(`whatsapp channel: uncaught exception: ${err}\n`)
+})
+
 // Permission reply format: `yes XXXXX` or `no XXXXX` (5 lowercase letters
 // minus 'l'). Matches the format emitted by Claude Code's permission system.
 const PERMISSION_REPLY_RE = /^\s*(y|yes|n|no)\s+([a-km-z]{5})\s*$/i
@@ -1554,3 +1563,16 @@ process.stdin.on('end', () => shutdown('stdin-end'))
 process.stdin.on('close', () => shutdown('stdin-close'))
 process.on('SIGTERM', () => shutdown('SIGTERM'))
 process.on('SIGINT', () => shutdown('SIGINT'))
+process.on('SIGHUP', () => shutdown('SIGHUP'))
+
+// Orphan watchdog: stdin events above don't reliably fire when the parent
+// chain (`bun run` wrapper → shell → us) is severed by a crash. Poll for
+// reparenting (POSIX) or a dead stdin pipe and self-terminate.
+const bootPpid = process.ppid
+setInterval(() => {
+  const orphaned =
+    (process.platform !== 'win32' && process.ppid !== bootPpid) ||
+    process.stdin.destroyed ||
+    process.stdin.readableEnded
+  if (orphaned) shutdown('orphan')
+}, 5000).unref()

@@ -2,7 +2,7 @@
 
 Connect a WhatsApp Business number to your Claude Code via the official WhatsApp Cloud API.
 
-The MCP server receives WhatsApp webhooks from Meta over HTTP, forwards inbound messages to your Claude Code session, and replies through the Cloud API. Built on the official Meta Graph API — **no Baileys, no WhatsApp Web reverse-engineering, no risk of account ban**.
+The MCP server receives WhatsApp webhooks from Meta over HTTP, forwards inbound messages to your Claude Code session, and replies through the Cloud API. Built on the official Meta Graph API — uses your WABA tokens, not WhatsApp Web reverse-engineering.
 
 ## Prerequisites
 
@@ -162,6 +162,6 @@ Text replies also work (`yes XXXXX` / `always XXXXX` / `no XXXXX` where `XXXXX` 
 
 Apache-2.0.
 
-## About
+## Maintainer
 
-Built by [RIA Systems](https://app.riasistemas.com.br), a verified Meta Tech Provider operating [Briefing Jurídico](https://app.riasistemas.com.br) — an AI legal assistant used by ~350 Brazilian law firms.
+Maintained by [RIA Systems](https://github.com/riasistemas), a Meta Tech Provider. Issues and PRs welcome at the [standalone repo](https://github.com/riasistemas/claude-channel-whatsapp).
