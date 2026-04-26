@@ -1,0 +1,14 @@
+{
+  "name": "riasistemas",
+  "owner": {
+    "name": "RIA Systems",
+    "url": "https://github.com/riasistemas"
+  },
+  "plugins": [
+    {
+      "name": "whatsapp",
+      "source": "./",
+      "description": "WhatsApp channel for Claude Code — official Cloud API integration."
+    }
+  ]
+}
