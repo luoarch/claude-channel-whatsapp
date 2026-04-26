@@ -5,3 +5,4 @@ bun.lock
 .DS_Store
 *.log
 state/
+.WHICH_PLUGIN
