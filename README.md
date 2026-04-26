@@ -144,7 +144,6 @@ Text replies also work (`yes XXXXX` / `always XXXXX` / `no XXXXX` where `XXXXX` 
 | `WHATSAPP_TIMEZONE` | `UTC` | IANA timezone for `local_time` in notifications |
 | `WHATSAPP_STATE_DIR` | `~/.claude/channels/whatsapp` | Override state directory |
 | `WHATSAPP_GRAPH_API_VERSION` | `v24.0` | Graph API version |
-| `GROQ_API_KEY` | (empty) | Enables inbound audio transcription via Groq Whisper |
 
 ## What you don't get (yet)
 

@@ -4,6 +4,25 @@ All notable changes to this plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.3] — 2026-04-26
+
+### Removed
+
+- **Groq Whisper inbound transcription**. The plugin no longer auto-
+  transcribes inbound audio. Audio messages are still downloaded and
+  the local file path is forwarded to the assistant via `meta.file_path`,
+  so a downstream tool or skill can transcribe if needed. Rationale:
+  channel plugins (telegram, discord, imessage) do not process content
+  upstream — they forward raw and let the assistant decide. Removing
+  Groq aligns this plugin with that pattern, drops a third-party
+  dependency, and reduces configuration surface. The `GROQ_API_KEY`
+  env var is no longer recognized.
+
+### Changed
+
+- Audio inbound is now downloaded to `MEDIA_DIR` like other media types,
+  so `meta.file_path` is populated and the assistant can `Read` it.
+
 ## [0.1.2] — 2026-04-26
 
 ### Documentation

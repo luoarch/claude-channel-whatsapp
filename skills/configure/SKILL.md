@@ -41,7 +41,6 @@ Optional:
 | `WHATSAPP_PHONE_REGION` | `intl` | Set to `BR` to enable Brazilian DDD9 matching heuristics |
 | `WHATSAPP_TIMEZONE` | `UTC` | IANA timezone for `local_time` in notifications |
 | `WHATSAPP_STATE_DIR` | `~/.claude/channels/whatsapp` | Override the state directory |
-| `GROQ_API_KEY` | (empty) | Enables inbound audio transcription via Groq Whisper |
 
 ---
 
@@ -125,8 +124,8 @@ each as a separate save in one pass. Preserves any keys not mentioned.
 
 ### `clear` — remove all credentials
 
-Delete `~/.claude/channels/whatsapp/.env` (or all `WHATSAPP_*` and
-`GROQ_API_KEY` lines if other unrelated keys are in the file).
+Delete `~/.claude/channels/whatsapp/.env` (or all `WHATSAPP_*` lines if
+other unrelated keys are in the file).
 
 ---
 

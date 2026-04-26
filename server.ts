@@ -44,9 +44,6 @@ const SELF_PHONE = (process.env.WHATSAPP_SELF_PHONE ?? '').replace(/\D/g, '')
 // and only this sender can answer them. Keep empty to disable permission relay.
 const PERMISSION_TARGET = (process.env.WHATSAPP_PERMISSION_TARGET ?? '').replace(/\D/g, '')
 
-// Optional inbound audio transcription via Groq Whisper. Set to enable.
-const GROQ_API_KEY = process.env.GROQ_API_KEY ?? ''
-
 // Permission reply format: `yes XXXXX` or `no XXXXX` (5 lowercase letters
 // minus 'l'). Matches the format emitted by Claude Code's permission system.
 const PERMISSION_REPLY_RE = /^\s*(y|yes|n|no)\s+([a-km-z]{5})\s*$/i
@@ -507,42 +504,6 @@ function chunkText(text: string, limit: number = MAX_WA_LENGTH): string[] {
   }
   if (remaining) chunks.push(remaining)
   return chunks
-}
-
-// ── Media Download & Transcription ─────────────────────────────────────────
-
-async function downloadMedia(mediaId: string): Promise<Buffer> {
-  // Step 1: Get media URL from Graph API
-  const urlRes = await fetch(`${GRAPH_API}/${mediaId}`, {
-    headers: { Authorization: `Bearer ${ACCESS_TOKEN}` },
-  })
-  const urlData = (await urlRes.json()) as any
-  if (!urlData.url) throw new Error(`No URL for media ${mediaId}`)
-
-  // Step 2: Download the actual media file
-  const mediaRes = await fetch(urlData.url, {
-    headers: { Authorization: `Bearer ${ACCESS_TOKEN}` },
-  })
-  if (!mediaRes.ok) throw new Error(`Download failed: ${mediaRes.status}`)
-  return Buffer.from(await mediaRes.arrayBuffer())
-}
-
-async function transcribeAudio(audioBuffer: Buffer): Promise<string> {
-  const blob = new Blob([audioBuffer], { type: 'audio/ogg' })
-  const formData = new FormData()
-  formData.append('file', blob, 'audio.ogg')
-  formData.append('model', 'whisper-large-v3')
-  formData.append('language', 'pt')
-
-  const res = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${GROQ_API_KEY}` },
-    body: formData,
-  })
-
-  const data = (await res.json()) as any
-  if (data.error) throw new Error(data.error.message || 'Transcription failed')
-  return data.text || ''
 }
 
 // ── Media Download & Save ──────────────────────────────────────────────
@@ -1374,24 +1335,11 @@ async function processWebhookPayload(payload: unknown): Promise<void> {
           }
         }
 
-        // Auto-transcribe audio messages
-        if (msg.type === 'audio' && msg.mediaId) {
-          try {
-            log(`transcribing audio ${msg.mediaId}...`)
-            const audioBuffer = await downloadMedia(msg.mediaId)
-            const transcription = await transcribeAudio(audioBuffer)
-            if (transcription) {
-              msg.body = `🎤 ${transcription}`
-              log(`transcribed: "${transcription.slice(0, 80)}"`)
-            }
-          } catch (err) {
-            log(`transcription error: ${err}`)
-          }
-        }
-
-        // Auto-download documents and images
+        // Auto-download documents, images, video, and audio so the assistant
+        // can `Read` the local file path. Audio is forwarded as-is — users
+        // who want transcription can run a follow-up tool over the file.
         let localMediaPath: string | undefined
-        if (msg.mediaId && ['document', 'image', 'video'].includes(msg.type)) {
+        if (msg.mediaId && ['document', 'image', 'video', 'audio'].includes(msg.type)) {
           try {
             const fallbackName = msg.type === 'document'
               ? (msg.body?.match(/\[Document: (.+?)\]/)?.[1] || `${msg.mediaId}`)
