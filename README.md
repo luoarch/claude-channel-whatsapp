@@ -161,6 +161,10 @@ Text replies also work (`yes XXXXX` / `always XXXXX` / `no XXXXX` where `XXXXX` 
 - **HTTPS required**: Meta delivers webhooks only to valid HTTPS URLs. Localhost direct doesn't work — you need a tunnel.
 - **One plugin instance per machine**: the plugin uses a PID lock at `~/.claude/channels/whatsapp/plugin.pid` to kill stale instances. Running multiple Claude sessions with this plugin on the same state directory will not work as expected.
 
+## Privacy
+
+All plugin data lives on the user's local machine. The maintainer does not operate any backend that this plugin talks to. See [PRIVACY.md](./PRIVACY.md) for the full policy.
+
 ## License
 
 Apache-2.0.
