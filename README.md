@@ -111,6 +111,16 @@ Quick reference: phones are stored as **digits-only E.164** (no `+`). Default po
 | `react` | Add an emoji reaction to a message by ID. Any single emoji works. |
 | `chat_messages` | Read recent message history for a chat (or all chats), straight from the local SQLite. |
 
+### Permission relay
+
+When `WHATSAPP_PERMISSION_TARGET` is set, the channel exposes the `claude/channel/permission` capability. Claude Code's permission prompts (when a tool needs approval to run) are forwarded to the configured phone as a WhatsApp message with three interactive buttons:
+
+- **✅ Allow** — approve once
+- **🔁 Always** — approve and auto-approve future requests matching the same pattern for the rest of the session
+- **❌ Deny** — reject
+
+Text replies also work (`yes XXXXX` / `always XXXXX` / `no XXXXX` where `XXXXX` is the 5-char request ID shown in the message). Replies are honored **only** from the configured target — other allowlisted contacts cannot answer permission prompts.
+
 ## Environment variables
 
 ### Required

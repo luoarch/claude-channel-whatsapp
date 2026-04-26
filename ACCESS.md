@@ -29,6 +29,30 @@ All state lives in `~/.claude/channels/whatsapp/access.json`. The `/whatsapp:acc
 | `pairing` | Reply with a 6-char pairing code, drop the message. Approve with `/whatsapp:access pair <code>`. Self-onboarding flow useful for customer support. Each stranger costs one outbound message. |
 | `disabled` | Drop everything, including allowlisted users and groups. |
 
+### `allowProspects` flag (escape hatch)
+
+Setting `allowProspects: true` in `access.json` lets **any** unknown sender through as a `prospect` (bypassing both `allowlist` drop and `pairing` codes). The notification reaches the assistant tagged with `relationship: "prospect"` so it can choose how to handle them.
+
+```jsonc
+{
+  "dmPolicy": "allowlist",
+  "allowFrom": ["15551234567"],
+  "allowProspects": true
+}
+```
+
+Use cases:
+- **Inbound sales/lead capture**: every WhatsApp message lands as a lead in your assistant session, no pre-approval needed.
+- **Customer support hotline**: combined with a Claude prompt that triages incoming requests.
+
+**Caveat:** opens the door to spam if your number is publicly listed. Combine with a `mentionPatterns` filter or rate-limit the assistant's outbound replies.
+
+Default is `false`. Toggle via:
+
+```
+/whatsapp:access set allowProspects true
+```
+
 ```
 /whatsapp:access policy allowlist
 ```
@@ -100,7 +124,8 @@ Configure outbound behavior with `/whatsapp:access set <key> <value>`.
 | `/whatsapp:access policy allowlist` | Set `dmPolicy`. Values: `pairing`, `allowlist`, `disabled`. |
 | `/whatsapp:access group add 120363...@g.us` | Enable a group. Flags: `--no-mention`, `--allow phone1,phone2`. |
 | `/whatsapp:access group rm 120363...@g.us` | Disable a group. |
-| `/whatsapp:access set textChunkLimit 3500` | Set a config key: `textChunkLimit`, `chunkMode`, `mentionPatterns`. |
+| `/whatsapp:access set allowProspects true` | Toggle the prospect-passthrough flag. |
+| `/whatsapp:access set textChunkLimit 3500` | Set a config key: `textChunkLimit`, `chunkMode`, `mentionPatterns`, `allowProspects`. |
 
 ## Config file
 
@@ -113,6 +138,10 @@ Configure outbound behavior with `/whatsapp:access set <key> <value>`.
 
   // E.164 phones (digits only, no +) allowed to DM.
   "allowFrom": ["15551234567"],
+
+  // When true, unknown senders pass through tagged as `prospect`
+  // (bypasses `allowlist` drop and `pairing` codes). Default false.
+  "allowProspects": false,
 
   // Groups the server is active in. Empty object = DM-only.
   "groups": {

@@ -4,6 +4,24 @@ All notable changes to this plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] — 2026-04-26
+
+### Documentation
+
+- **`allowProspects` flag**: documented in `ACCESS.md` (escape-hatch section
+  + JSON schema) and in the `/whatsapp:access` skill. Toggle with
+  `/whatsapp:access set allowProspects true`. When true, unknown senders
+  pass through tagged `relationship: "prospect"`, bypassing both
+  `allowlist` drop and `pairing` codes. Useful for inbound sales / lead
+  capture.
+- **Permission relay**: documented as opt-in in `README` via
+  `WHATSAPP_PERMISSION_TARGET` env var. Forwards Claude Code's permission
+  prompts to a configured phone as a WhatsApp interactive message with
+  three buttons (✅ Allow / 🔁 Always / ❌ Deny). Text fallback
+  (`yes XXXXX` / `always XXXXX` / `no XXXXX`) also accepted. Replies
+  honored only from the configured target. Validated in production
+  internally before this release.
+
 ## [0.1.1] — 2026-04-26
 
 ### Added

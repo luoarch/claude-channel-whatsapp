@@ -32,8 +32,9 @@ Arguments passed: `$ARGUMENTS`
 
 ```json
 {
-  "dmPolicy": "pairing",
+  "dmPolicy": "allowlist",
   "allowFrom": ["<phone>", ...],
+  "allowProspects": false,
   "groups": {
     "<groupId>": { "requireMention": true, "allowFrom": [] }
   },
@@ -47,7 +48,9 @@ Arguments passed: `$ARGUMENTS`
 }
 ```
 
-Missing file = `{dmPolicy:"pairing", allowFrom:[], groups:{}, pending:{}}`.
+Missing file = `{dmPolicy:"allowlist", allowFrom:[], allowProspects:false, groups:{}, pending:{}}`.
+
+`allowProspects: true` is an escape hatch — every unknown sender passes through tagged `relationship: "prospect"` (bypasses `allowlist` drop and `pairing` codes). Useful for inbound sales / lead capture.
 
 **Phone format**: E.164 without the `+` (e.g., `15551234567` for a US number,
 `5511987654321` for a Brazilian one). The server normalizes inbound phones
@@ -114,10 +117,12 @@ Parse `$ARGUMENTS` (space-separated). If empty or unrecognized, show status.
 ### `set <key> <value>`
 
 Delivery/UX config. Supported keys: `mentionPatterns`, `textChunkLimit`,
-`chunkMode`. Validate types:
+`chunkMode`, `allowProspects`. Validate types:
 - `textChunkLimit`: number (max 4000 — WhatsApp's text body limit)
 - `chunkMode`: `length` | `newline`
 - `mentionPatterns`: JSON array of regex strings
+- `allowProspects`: boolean — when true, unknown senders pass through as
+  `prospect` (bypasses both `allowlist` drop and `pairing` codes)
 
 Read, set the key, write, confirm.
 
