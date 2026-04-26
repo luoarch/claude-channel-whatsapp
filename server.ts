@@ -12,7 +12,7 @@ import {
   CallToolRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js'
 import { Database } from 'bun:sqlite'
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs'
+import { readFileSync, writeFileSync, readdirSync, mkdirSync, rmSync, existsSync } from 'fs'
 import { homedir } from 'os'
 import { join } from 'path'
 import { z } from 'zod'
@@ -185,6 +185,7 @@ function chatIdFromPhone(phone: string): string {
 
 mkdirSync(STATE_DIR, { recursive: true, mode: 0o700 })
 mkdirSync(MEDIA_DIR, { recursive: true, mode: 0o700 })
+mkdirSync(join(STATE_DIR, 'approved'), { recursive: true, mode: 0o700 })
 
 const db = new Database(DB_PATH)
 db.exec('PRAGMA journal_mode=WAL')
@@ -223,20 +224,43 @@ const stmtInsertSent = db.prepare(
 
 // ── Access Control ──────────────────────────────────────────────────────────
 
+const APPROVED_DIR = join(STATE_DIR, 'approved')
+
+type PendingPairing = {
+  senderId: string
+  chatId: string
+  createdAt: number
+  expiresAt: number
+  replies?: number
+}
+
 type Access = {
-  dmPolicy: 'allowlist' | 'disabled'
+  dmPolicy: 'pairing' | 'allowlist' | 'disabled'
   allowFrom: string[]
   allowProspects?: boolean
   groups: Record<string, unknown>
-  pending: Record<string, unknown>
+  pending: Record<string, PendingPairing>
+  mentionPatterns?: string[]
+  textChunkLimit?: number
+  chunkMode?: 'length' | 'newline'
 }
 
 type Relationship = 'self' | 'known' | 'prospect' | 'blocked'
+
+type GateResult =
+  | { action: 'deliver'; relationship: Relationship }
+  | { action: 'drop'; relationship: Relationship }
+  | { action: 'pair'; code: string; isResend: boolean }
 
 function loadAccess(): Access {
   try {
     return JSON.parse(readFileSync(ACCESS_PATH, 'utf-8')) as Access
   } catch {
+    // Default to `allowlist` instead of `pairing` (which Telegram/Discord use):
+    // WhatsApp messages cost money inside the 24h customer-service window,
+    // so silently dropping strangers is cheaper and safer than auto-replying
+    // with pairing codes. Operators can flip to `pairing` if they want the
+    // self-onboarding flow (e.g. customer support).
     const defaults: Access = {
       dmPolicy: 'allowlist',
       allowFrom: [],
@@ -255,22 +279,97 @@ function saveAccess(access: Access) {
   })
 }
 
-function gate(senderId: string): { allowed: boolean; relationship: Relationship } {
-  // Self-phone always passes
-  if (phonesMatch(senderId, SELF_PHONE)) return { allowed: true, relationship: 'self' }
+function pruneExpired(access: Access): boolean {
+  let pruned = false
+  const now = Date.now()
+  for (const [code, p] of Object.entries(access.pending)) {
+    if (p.expiresAt < now) {
+      delete access.pending[code]
+      pruned = true
+    }
+  }
+  return pruned
+}
+
+function newPairingCode(): string {
+  // 6-char code from a-km-z (no l/L to avoid confusion with 1/I).
+  const alphabet = 'abcdefghijkmnopqrstuvwxyz'
+  let code = ''
+  for (let i = 0; i < 6; i++) {
+    code += alphabet[Math.floor(Math.random() * alphabet.length)]
+  }
+  return code
+}
+
+function gate(senderId: string, chatId: string): GateResult {
+  // Self-phone always passes.
+  if (SELF_PHONE && phonesMatch(senderId, SELF_PHONE)) {
+    return { action: 'deliver', relationship: 'self' }
+  }
 
   const access = loadAccess()
-  if (access.dmPolicy === 'disabled') return { allowed: false, relationship: 'blocked' }
+  if (pruneExpired(access)) saveAccess(access)
+
+  if (access.dmPolicy === 'disabled') return { action: 'drop', relationship: 'blocked' }
 
   // Known contact in allowlist
   if (access.allowFrom.some((a) => phonesMatch(a, senderId))) {
-    return { allowed: true, relationship: 'known' }
+    return { action: 'deliver', relationship: 'known' }
   }
 
   // Unknown sender — allow as prospect if flag is on
-  if (access.allowProspects) return { allowed: true, relationship: 'prospect' }
+  if (access.allowProspects) return { action: 'deliver', relationship: 'prospect' }
 
-  return { allowed: false, relationship: 'blocked' }
+  if (access.dmPolicy === 'allowlist') return { action: 'drop', relationship: 'blocked' }
+
+  // dmPolicy === 'pairing' — issue or refresh a pairing code.
+  for (const [code, p] of Object.entries(access.pending)) {
+    if (phonesMatch(p.senderId, senderId)) {
+      // Reply twice max (initial + one reminder), then go silent.
+      if ((p.replies ?? 1) >= 2) return { action: 'drop', relationship: 'blocked' }
+      p.replies = (p.replies ?? 1) + 1
+      saveAccess(access)
+      return { action: 'pair', code, isResend: true }
+    }
+  }
+  // Cap pending at 5 to keep noise down. Extra attempts are silently dropped.
+  if (Object.keys(access.pending).length >= 5) {
+    return { action: 'drop', relationship: 'blocked' }
+  }
+
+  const code = newPairingCode()
+  const now = Date.now()
+  access.pending[code] = {
+    senderId,
+    chatId,
+    createdAt: now,
+    expiresAt: now + 60 * 60 * 1000, // 1h
+    replies: 1,
+  }
+  saveAccess(access)
+  return { action: 'pair', code, isResend: false }
+}
+
+// Skill /whatsapp:access pair <code> moves the pending entry into allowFrom and
+// drops a marker file at APPROVED_DIR/<senderId>. The server polls and sends
+// a confirmation message back to the new contact.
+function checkApprovals(): void {
+  let files: string[]
+  try {
+    files = readdirSync(APPROVED_DIR)
+  } catch {
+    return
+  }
+  for (const senderId of files) {
+    const file = join(APPROVED_DIR, senderId)
+    void sendText(senderId, `✅ Paired! Send a message to reach the assistant.`).then(
+      () => rmSync(file, { force: true }),
+      err => {
+        log(`approval confirm failed for ${senderId}: ${err}`)
+        rmSync(file, { force: true })
+      },
+    )
+  }
 }
 
 // ── Parse WhatsApp Webhook Payload ──────────────────────────────────────────
@@ -634,6 +733,60 @@ async function sendDocument(
   return { success: true }
 }
 
+async function sendImage(
+  to: string,
+  mediaId: string,
+  caption?: string,
+): Promise<{ success: boolean; error?: string }> {
+  const phone = normalizePhone(to)
+  const image: any = { id: mediaId }
+  if (caption) image.caption = caption
+  const res = await fetch(`${GRAPH_API}/${PHONE_NUMBER_ID}/messages`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${ACCESS_TOKEN}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      messaging_product: 'whatsapp',
+      to: phone,
+      type: 'image',
+      image,
+    }),
+  })
+  const data = (await res.json()) as any
+  if (data.error) return { success: false, error: data.error.message }
+  return { success: true }
+}
+
+/**
+ * Send audio as a voice note (forced `voice: true` so the recipient sees the
+ * inline waveform and play button instead of a generic audio attachment).
+ * Audio MUST be OGG/Opus — Meta rejects other codecs for voice notes.
+ */
+async function sendVoice(
+  to: string,
+  mediaId: string,
+): Promise<{ success: boolean; error?: string }> {
+  const phone = normalizePhone(to)
+  const res = await fetch(`${GRAPH_API}/${PHONE_NUMBER_ID}/messages`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${ACCESS_TOKEN}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      messaging_product: 'whatsapp',
+      to: phone,
+      type: 'audio',
+      audio: { id: mediaId, voice: true },
+    }),
+  })
+  const data = (await res.json()) as any
+  if (data.error) return { success: false, error: data.error.message }
+  return { success: true }
+}
+
 // ── MCP Server ──────────────────────────────────────────────────────────────
 
 const mcp = new Server(
@@ -936,24 +1089,49 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
           sent++
         }
 
-        // Send file attachments
+        // Send file attachments — dispatch by type so audio renders as a
+        // voice note (waveform + play button) instead of a download link,
+        // and images render with inline preview.
+        const IMAGE_EXTS = new Set(['jpg', 'jpeg', 'png', 'webp'])
+        const VOICE_EXTS = new Set(['ogg', 'opus'])
+        const mimeMap: Record<string, string> = {
+          pdf: 'application/pdf',
+          png: 'image/png',
+          jpg: 'image/jpeg',
+          jpeg: 'image/jpeg',
+          webp: 'image/webp',
+          doc: 'application/msword',
+          docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          ogg: 'audio/ogg',
+          opus: 'audio/ogg',
+          mp3: 'audio/mpeg',
+          mp4: 'video/mp4',
+        }
         for (const filePath of files) {
           const ext = filePath.split('.').pop()?.toLowerCase() || ''
-          const mimeMap: Record<string, string> = {
-            pdf: 'application/pdf',
-            png: 'image/png',
-            jpg: 'image/jpeg',
-            jpeg: 'image/jpeg',
-            doc: 'application/msword',
-            docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            ogg: 'audio/ogg',
-            mp3: 'audio/mpeg',
-            mp4: 'video/mp4',
-          }
           const mime = mimeMap[ext] || 'application/octet-stream'
           const mediaId = await uploadMedia(filePath, mime)
           const filename = filePath.split('/').pop() || 'file'
-          await sendDocument(phone, mediaId, filename)
+
+          let result: { success: boolean; error?: string }
+          if (VOICE_EXTS.has(ext)) {
+            // OGG/Opus → voice note (forced voice:true)
+            result = await sendVoice(phone, mediaId)
+          } else if (IMAGE_EXTS.has(ext)) {
+            // jpg/png/webp → inline image
+            result = await sendImage(phone, mediaId)
+          } else {
+            // pdf, docx, mp3, mp4, etc. → document
+            result = await sendDocument(phone, mediaId, filename)
+          }
+          if (!result.success) {
+            return {
+              content: [
+                { type: 'text' as const, text: `send file failed: ${result.error}` },
+              ],
+              isError: true,
+            }
+          }
           sent++
         }
 
@@ -1088,12 +1266,23 @@ async function processWebhookPayload(payload: unknown): Promise<void> {
         // Skip echoes
         if (isFromMe) continue
 
+        const chatId = chatIdFromPhone(phone)
+
         // Check access gate
-        const gateResult = gate(phone)
-        if (!gateResult.allowed) {
+        const gateOutcome = gate(phone, chatId)
+        if (gateOutcome.action === 'pair') {
+          const intro = gateOutcome.isResend
+            ? `Reminder — your pairing code is *${gateOutcome.code}*. Ask the operator to run \`/whatsapp:access pair ${gateOutcome.code}\` to approve you.`
+            : `👋 To reach the assistant, the operator must approve you. Your pairing code is *${gateOutcome.code}* — ask them to run \`/whatsapp:access pair ${gateOutcome.code}\`.`
+          void sendText(phone, intro).catch(err => log(`pairing send error: ${err}`))
+          log(`pairing ${gateOutcome.isResend ? 'resent' : 'issued'}: ${phone} → ${gateOutcome.code}`)
+          continue
+        }
+        if (gateOutcome.action === 'drop') {
           log(`gate BLOCKED: ${phone}`)
           continue
         }
+        const gateResult = { allowed: true, relationship: gateOutcome.relationship }
         if (gateResult.relationship === 'prospect') {
           log(`prospect ALLOWED: ${phone}`)
         }
@@ -1244,7 +1433,6 @@ async function processWebhookPayload(payload: unknown): Promise<void> {
           const who = quotedFromMe ? 'my previous msg' : 'their msg'
           content = `↩ replying (${who}): "${quotedSnippet}"\n\n${content}`
         }
-        const chatId = chatIdFromPhone(phone)
         log(`>>> ${phone}: "${content.slice(0, 50)}"`)
 
         const meta: Record<string, string> = {
@@ -1316,6 +1504,10 @@ log(`webhook port: ${WEBHOOK_PORT}`)
 
 // Initialize access.json if missing
 loadAccess()
+
+// Watch APPROVED_DIR for entries left by /whatsapp:access pair, and send a
+// confirmation to each newly-approved sender.
+setInterval(checkApprovals, 5000).unref()
 
 // Connect MCP transport FIRST — must be ready before notifications
 const transport = new StdioServerTransport()

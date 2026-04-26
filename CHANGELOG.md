@@ -4,6 +4,39 @@ All notable changes to this plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] — 2026-04-26
+
+### Added
+
+- **Pairing flow**: `gate()` now returns a `pair` action when `dmPolicy` is
+  `pairing` and an unknown sender writes in. The server generates a 6-char
+  code, persists it in `access.pending` with a 1h TTL, and sends a message
+  back to the sender with the code so the operator can run
+  `/whatsapp:access pair <code>` to approve them.
+- **`checkApprovals()`**: 5s poll over `~/.claude/channels/whatsapp/approved/`.
+  When `/whatsapp:access pair` drops a marker, the server sends the new
+  contact a "✅ Paired!" confirmation and removes the marker.
+- **File-type dispatch in `reply` tool**: attachments are routed by
+  extension. `.ogg`/`.opus` → voice note (`voice: true` forced — required
+  for waveform/play-button rendering). `.jpg`/`.jpeg`/`.png`/`.webp` →
+  inline image. Everything else → document.
+- **Webhook receive log**: every inbound `POST /webhook` now logs
+  `webhook received (N bytes)` to aid debugging.
+
+### Changed
+
+- **Default `dmPolicy` is now `allowlist`** instead of `pairing`. WhatsApp
+  uses the sender's phone number as the ID (unlike Telegram/Discord opaque
+  IDs), so operators already know who to allow. Pairing remains available
+  but is opt-in to avoid the per-stranger outbound message cost.
+
+### Fixed
+
+- **`parseWebhookPayload`** expected `payload.body.entry` (legacy CF Worker
+  envelope shape). Meta sends `payload.entry` directly, so the parser
+  silently returned `[]` and no inbound messages were processed. Bug
+  surfaced when migrating from R2-polling inbound to direct HTTP webhook.
+
 ## [0.1.0] — 2026-04-26
 
 ### Added

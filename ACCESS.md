@@ -2,7 +2,9 @@
 
 A WhatsApp Business number is publicly addressable. Anyone with the number can send a message, and without a gate those would flow straight into your assistant session. The access model described here decides who gets through.
 
-By default, a DM from an unknown sender triggers **pairing**: the server replies with a 6-character code and drops the message. You run `/whatsapp:access pair <code>` from your assistant session to approve them. Once approved, their messages pass through.
+By default, the channel uses **`allowlist`** mode: messages from senders not in `allowFrom` are silently dropped — no reply, no notification. You add phones explicitly with `/whatsapp:access allow <phone>` from your assistant session. This is cheaper and safer than the alternative (pairing) because every reply WhatsApp sends inside the 24h customer-service window counts against your messaging quota.
+
+If you want a self-onboarding flow (e.g. customer support), flip to **`pairing`**: a DM from an unknown sender gets back a 6-character code, and you run `/whatsapp:access pair <code>` to approve them. Pairing costs one outbound message per stranger, so it's an opt-in choice.
 
 All state lives in `~/.claude/channels/whatsapp/access.json`. The `/whatsapp:access` skill commands edit this file; the server re-reads it on every inbound message, so changes take effect without a restart.
 
@@ -10,7 +12,7 @@ All state lives in `~/.claude/channels/whatsapp/access.json`. The `/whatsapp:acc
 
 | | |
 | --- | --- |
-| Default policy | `pairing` |
+| Default policy | `allowlist` |
 | Sender ID | E.164 phone without `+` (e.g. `15551234567`) |
 | Group key | WhatsApp group ID (e.g. `120363041234567890@g.us`) |
 | Inbound transport | Webhook POST from Meta to your server |
@@ -23,8 +25,8 @@ All state lives in `~/.claude/channels/whatsapp/access.json`. The `/whatsapp:acc
 
 | Policy | Behavior |
 | --- | --- |
-| `pairing` (default) | Reply with a pairing code, drop the message. Approve with `/whatsapp:access pair <code>`. |
-| `allowlist` | Drop silently. No reply. Useful once your contacts are captured and you don't want to advertise the number. |
+| `allowlist` (default) | Drop silently. No reply. Cheapest option — costs zero outbound messages. Recommended for personal/private use where you know who's allowed in advance. |
+| `pairing` | Reply with a 6-char pairing code, drop the message. Approve with `/whatsapp:access pair <code>`. Self-onboarding flow useful for customer support. Each stranger costs one outbound message. |
 | `disabled` | Drop everything, including allowlisted users and groups. |
 
 ```
@@ -107,7 +109,7 @@ Configure outbound behavior with `/whatsapp:access set <key> <value>`.
 ```jsonc
 {
   // Handling for DMs from senders not in allowFrom.
-  "dmPolicy": "pairing",
+  "dmPolicy": "allowlist",
 
   // E.164 phones (digits only, no +) allowed to DM.
   "allowFrom": ["15551234567"],

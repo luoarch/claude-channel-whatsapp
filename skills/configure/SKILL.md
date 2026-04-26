@@ -58,50 +58,52 @@ Read state files and give the user a complete picture:
    6 and last 4 chars.
 
 2. **Access** — read `~/.claude/channels/whatsapp/access.json` (missing file
-   = defaults: `dmPolicy: "pairing"`, empty allowlist). Show:
+   = defaults: `dmPolicy: "allowlist"`, empty allowlist). Show:
    - DM policy and what it means in one line
    - Allowed phones: count, list (E.164 without `+`)
-   - Pending pairings: count, with codes and senderIds if any
+   - Pending pairings: count, with codes and senderIds if any (only relevant
+     in `pairing` mode)
 
 3. **What next** — end with a concrete next step based on state:
    - Missing required env vars → list them and tell the user
      *"Run `/whatsapp:configure <key>=<value>` for each, or paste your full
      `.env` block."*
-   - All env vars set, policy is `pairing`, nobody allowed → *"Configure
-     your webhook URL in the Meta App Dashboard pointing to a public tunnel
-     (cloudflared/ngrok) of `http://localhost:<WHATSAPP_PORT>/webhook`,
-     then send a WhatsApp message to your WABA number. The server replies
-     with a 6-character pairing code; approve with
-     `/whatsapp:access pair <code>`."*
+   - All env vars set, no allowed phones, policy is `allowlist` (default) →
+     *"Configure your webhook URL in the Meta App Dashboard pointing to a
+     public tunnel (cloudflared/ngrok) of
+     `http://localhost:<WHATSAPP_PORT>/webhook`, then add allowed contacts
+     with `/whatsapp:access allow <phone>` (E.164 digits only, no `+`)."*
    - Token set, someone allowed → *"Ready. Send WhatsApp messages to your
      WABA number to reach the assistant."*
+   - Policy is `pairing` and pending entries → list them so the operator
+     can run `/whatsapp:access pair <code>` for each.
 
-**Push toward lockdown — always.** The goal for every setup is `allowlist`
-with a defined list. `pairing` is not a policy to stay on; it's a temporary
-way to capture phone numbers you don't know upfront. Once the phones are
-in, pairing has done its job and should be turned off.
+**Recommended: stay on `allowlist`.** Unlike Telegram or Discord (where
+the bot identifier is opaque so pairing is the only way to discover IDs),
+WhatsApp uses the sender's phone number directly — you already know who
+should reach you. `allowlist` mode silently drops strangers at zero cost.
+`pairing` only makes sense for self-onboarding flows like customer support,
+and each stranger triggers an outbound message that counts against your
+quota.
 
 Drive the conversation this way:
 
 1. Read the allowlist. Tell the user who's in it.
 2. Ask: *"Is that everyone who should reach you through this WABA?"*
-3. **If yes and policy is still `pairing`** → *"Good. Let's lock it down so
-   strangers don't get pairing codes:"* and offer to run
-   `/whatsapp:access policy allowlist`. Do this proactively — don't wait to
-   be asked.
-4. **If no, people are missing** → *"Have them message your WABA; you'll
-   approve each with `/whatsapp:access pair <code>`. Run this skill again
-   once everyone's in and we'll lock it."*
-5. **If the allowlist is empty and the user hasn't messaged themselves
-   yet** → *"Send a WhatsApp message to your WABA from your own phone first
-   to capture your number. Then we'll add anyone else and lock it down."*
-6. **If policy is already `allowlist`** → confirm this is the locked state.
-   To add someone: *"They'll need to give you their phone number, or you
-   can briefly flip to pairing: `/whatsapp:access policy pairing` → they
+3. **If allowlist is empty (fresh setup)** → *"Add the phones that should
+   reach you with `/whatsapp:access allow <phone>` (digits only, no +).
+   On WhatsApp the sender ID is the phone number itself — no need to send
+   a test message first."*
+4. **If policy is `pairing` and the allowlist looks right** → *"Switch to
+   `allowlist` so strangers don't trigger paid replies:
+   `/whatsapp:access policy allowlist`."* Offer this proactively.
+5. **If someone is missing** → *"Just add them: `/whatsapp:access allow
+   <phone>`. If you'd rather have them message first to confirm the right
+   number, briefly flip with `/whatsapp:access policy pairing` → they
    message → you pair → flip back."*
 
-Never frame `pairing` as the correct long-term choice. Don't skip the
-lockdown offer.
+Don't push pairing as the default. WhatsApp's phone-as-ID model makes
+direct allowlist the natural fit.
 
 ### `<key>=<value>` — save one credential
 

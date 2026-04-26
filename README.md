@@ -107,7 +107,7 @@ Quick reference: phones are stored as **digits-only E.164** (no `+`). Default po
 
 | Tool | Purpose |
 | --- | --- |
-| `reply` | Send to a chat. Takes `chat_id` + `text`, optionally `files` (absolute paths) for attachments. Images (`.jpg`/`.png`) send as photos with inline preview; audio (`.ogg`/`.mp3`) as voice notes; other types as documents. Auto-chunks long text at 4000 chars. |
+| `reply` | Send to a chat. Takes `chat_id` + `text`, optionally `files` (absolute paths) for attachments. Files are dispatched by extension: `.jpg`/`.jpeg`/`.png`/`.webp` → inline image; `.ogg`/`.opus` → **voice note** (forced `voice:true` — must be OGG/Opus, MP3 won't render as voice); everything else (`.pdf`, `.docx`, `.mp4`, etc.) → document. Auto-chunks long text at 4000 chars. |
 | `react` | Add an emoji reaction to a message by ID. Any single emoji works. |
 | `chat_messages` | Read recent message history for a chat (or all chats), straight from the local SQLite. |
 
