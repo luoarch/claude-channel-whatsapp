@@ -4,6 +4,26 @@ All notable changes to this plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.5] — 2026-04-26
+
+### Fixed
+
+- README still described the Quick Setup pairing flow as the default, but
+  the actual default has been `allowlist` since 0.1.1. Quick Setup now
+  shows `/whatsapp:access allow <phone>` as the recommended path and
+  documents `pairing` as an opt-in customer-support flow.
+- README's "Access control" quick reference said `Default policy is
+  pairing`. Updated to `allowlist`.
+- Replaced a hardcoded example phone number in a `phoneFromChatId` code
+  comment with a generic `<E164>` placeholder.
+
+### Removed
+
+- Roadmap-style "What you don't get (yet)" section — collapsed into a
+  shorter, neutral "What you don't get" list. The ambition statements
+  (Embedded Signup / hosted v0.2) didn't belong in a current-version
+  README.
+
 ## [0.1.4] — 2026-04-26
 
 ### Added

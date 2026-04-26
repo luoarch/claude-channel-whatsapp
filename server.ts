@@ -176,7 +176,7 @@ function phonesMatch(a: string, b: string): boolean {
 }
 
 function phoneFromChatId(chatId: string): string {
-  // chat_id format: "any;-;+5561985598585"
+  // chat_id format: "any;-;+<E164>"
   const parts = chatId.split(';-;')
   const raw = parts.length > 1 ? parts[1]! : chatId
   return normalizePhone(raw)

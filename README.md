@@ -12,7 +12,7 @@ The MCP server receives WhatsApp webhooks from Meta over HTTP, forwards inbound 
 - A way to expose your local webhook publicly: [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/install-and-setup/installation/) (recommended), [ngrok](https://ngrok.com/), or any HTTPS tunnel.
 
 ## Quick Setup
-> Default pairing flow for a single-user WABA. See [ACCESS.md](./ACCESS.md) for groups and multi-user setups.
+> See [ACCESS.md](./ACCESS.md) for DM policies, groups, and multi-user setups.
 
 **1. Create a WhatsApp Business app on Meta.**
 
@@ -83,25 +83,29 @@ The server only starts when this flag is present. Exit your session and start a 
 claude --channels plugin:whatsapp@riasistemas
 ```
 
-**7. Pair.**
+**7. Allow your number.**
 
-With Claude Code running, send a WhatsApp message to your WABA test number from your phone. The server replies with a 6-character pairing code. In your Claude Code session:
+The default `dmPolicy` is `allowlist` — strangers are dropped silently. Add the phone(s) that should reach you:
 
 ```
-/whatsapp:access pair <code>
+/whatsapp:access allow <phone>
 ```
 
-Your next message reaches the assistant.
+`<phone>` is digits-only, E.164, no `+` (e.g. `15551234567`). Send a WhatsApp message from that number to the WABA and it reaches your Claude Code session.
 
-**8. Lock it down.**
+If you'd rather have senders self-onboard via a code instead of pre-adding them (e.g. customer support), flip to `pairing`:
 
-Pairing is for capturing phone numbers. Once you're in, switch to `allowlist` so strangers don't get pairing-code replies (and your WABA number doesn't waste the 24-hour customer-service window on noise). Ask Claude to do it, or run `/whatsapp:access policy allowlist` directly.
+```
+/whatsapp:access policy pairing
+```
+
+In `pairing` mode, an unknown sender gets a 6-character code reply; you approve it with `/whatsapp:access pair <code>`. Each pairing reply costs one outbound message inside the WhatsApp 24-hour customer-service window.
 
 ## Access control
 
 See **[ACCESS.md](./ACCESS.md)** for DM policies, groups, mention detection, delivery config, skill commands, and the `access.json` schema.
 
-Quick reference: phones are stored as **digits-only E.164** (no `+`). Default policy is `pairing`. Set `WHATSAPP_PHONE_REGION=BR` to handle Brazilian DDD9 matching automatically.
+Quick reference: phones are stored as **digits-only E.164** (no `+`). Default policy is `allowlist`. Set `WHATSAPP_PHONE_REGION=BR` to handle Brazilian DDD9 matching automatically.
 
 ## Tools exposed to the assistant
 
@@ -145,11 +149,10 @@ Text replies also work (`yes XXXXX` / `always XXXXX` / `no XXXXX` where `XXXXX` 
 | `WHATSAPP_STATE_DIR` | `~/.claude/channels/whatsapp` | Override state directory |
 | `WHATSAPP_GRAPH_API_VERSION` | `v24.0` | Graph API version |
 
-## What you don't get (yet)
+## What you don't get
 
-- **Templates** — sending pre-approved message templates outside the 24-hour customer-service window. The Cloud API supports them; the plugin currently doesn't expose a tool for it. Workaround: call the Graph API directly from a script.
-- **Embedded Signup** — for the v0.1 release the user must create their own Meta app. A future v0.2 will add an optional turnkey "Login with Meta" flow via a Tech Provider, eliminating manual app setup.
-- **Buffered inbound when offline** — Meta retries webhook deliveries for up to 24 hours, so short outages are recovered automatically. But if your machine is offline for longer, those messages are lost. The v0.2 hosted option (above) buffers indefinitely.
+- **Templates** — sending pre-approved message templates outside the 24-hour customer-service window. The Cloud API supports them; this plugin currently doesn't expose a tool for it. Workaround: call the Graph API directly from a script.
+- **Buffered inbound when offline** — Meta retries webhook deliveries for up to 24 hours, so short outages recover automatically. Longer outages drop messages. If you need indefinite buffering, put a webhook receiver of your own (CF Worker, Lambda, etc.) in front of the plugin.
 
 ## Limitations
 
