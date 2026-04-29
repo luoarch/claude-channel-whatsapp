@@ -739,16 +739,20 @@ async function uploadMedia(
   filePath: string,
   mimeType: string,
 ): Promise<string> {
-  const { execSync } = await import('child_process')
-  const result = execSync(
-    `curl -s -X POST "${GRAPH_API}/${PHONE_NUMBER_ID}/media" ` +
-      `-H "Authorization: Bearer ${ACCESS_TOKEN}" ` +
-      `-F "messaging_product=whatsapp" ` +
-      `-F "file=@${filePath};type=${mimeType}" ` +
-      `-F "type=${mimeType}"`,
-    { encoding: 'utf-8', timeout: 30000 },
-  )
-  const data = JSON.parse(result)
+  const file = Bun.file(filePath)
+  const blob = new Blob([await file.arrayBuffer()], { type: mimeType })
+  const form = new FormData()
+  form.append('messaging_product', 'whatsapp')
+  form.append('type', mimeType)
+  form.append('file', blob, basename(filePath))
+
+  const res = await fetch(`${GRAPH_API}/${PHONE_NUMBER_ID}/media`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${ACCESS_TOKEN}` },
+    body: form,
+    signal: AbortSignal.timeout(30000),
+  })
+  const data = (await res.json()) as { id?: string; error?: unknown }
   if (!data.id) throw new Error(`Upload failed: ${JSON.stringify(data)}`)
   return data.id
 }
