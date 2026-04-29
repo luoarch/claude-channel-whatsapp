@@ -32,7 +32,7 @@
 
 **Legend:** `○` not started · `◐` in progress · `✓` complete
 
-**Siblings:** evidence.md · spikes/
+**Siblings:** evidence.md · spikes/ · pr4/ (sub-shape for #15)
 
 **Context (from §18):**
 - risk class: **high** (security surface, pre-distribution; SSOT-equivalent change for permission relay protocol)
