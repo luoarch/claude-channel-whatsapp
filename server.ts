@@ -68,12 +68,19 @@ let lastActiveChatId: string | null = null
 
 // Active task: set when a WhatsApp message is delivered to Claude, cleared
 // when Claude calls `reply` for that phone. Used for permission attribution.
+// Also bounded by `expiresAt` (5 min after inbound) so a permission_request
+// arriving long after a forgotten conversation can't still be attributed
+// "During conversation with X" — that misattribution was a social-engineering
+// vector. After expiry the relay falls back to "Internal work".
+const ACTIVE_TASK_TTL_MS = 5 * 60 * 1000
+
 let activeTask: {
   id: string
   phone: string
   relationship: Relationship
   pushName: string | null
   status: 'processing' | 'replied'
+  expiresAt: number
 } | null = null
 
 const WEBHOOK_PORT = Number(process.env.WHATSAPP_PORT ?? '3789')
@@ -977,10 +984,10 @@ mcp.setNotificationHandler(
       if (oldestKey) pendingPermissions.delete(oldestKey)
     }
 
-    // Attribution: based on activeTask (set by WhatsApp inbound, cleared by reply).
-    // No timeouts — the reply tool is the explicit end-of-task signal.
+    // Attribution: based on activeTask (set by WhatsApp inbound, cleared by reply
+    // or by 5min TTL expiry — see ACTIVE_TASK_TTL_MS).
     let contextLine = ''
-    if (activeTask && activeTask.status === 'processing') {
+    if (activeTask && activeTask.status === 'processing' && activeTask.expiresAt > Date.now()) {
       const who = activeTask.pushName || `+${normalizePhone(activeTask.phone)}`
       const tag = activeTask.relationship === 'prospect' ? ' _(prospect)_' : ''
       contextLine = `👤 During conversation with *${who}*${tag}\n_Task: ${activeTask.id}_\n\n`
@@ -1505,6 +1512,7 @@ async function processWebhookPayload(payload: unknown): Promise<void> {
             relationship: gateResult.relationship,
             pushName: msg.pushName,
             status: 'processing',
+            expiresAt: Date.now() + ACTIVE_TASK_TTL_MS,
           }
           // Evict entries older than 10 minutes
           const cutoff = Math.floor(Date.now() / 1000) - 600
@@ -1538,6 +1546,16 @@ loadAccess()
 // Watch APPROVED_DIR for entries left by /whatsapp:access pair, and send a
 // confirmation to each newly-approved sender.
 setInterval(checkApprovals, 5000).unref()
+
+// Clear expired activeTask so attribution doesn't stay attached to a stale
+// conversation. Read sites also check expiresAt defensively; this interval
+// just keeps the in-memory state honest between reads.
+setInterval(() => {
+  if (activeTask && activeTask.expiresAt <= Date.now()) {
+    log(`activeTask ${activeTask.id} expired (${ACTIVE_TASK_TTL_MS / 1000}s TTL)`)
+    activeTask = null
+  }
+}, 60_000).unref()
 
 // Connect MCP transport FIRST — must be ready before notifications
 const transport = new StdioServerTransport()
