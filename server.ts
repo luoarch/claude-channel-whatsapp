@@ -12,9 +12,9 @@ import {
   CallToolRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js'
 import { Database } from 'bun:sqlite'
-import { readFileSync, writeFileSync, readdirSync, mkdirSync, rmSync, existsSync } from 'fs'
+import { readFileSync, writeFileSync, readdirSync, mkdirSync, rmSync, existsSync, realpathSync } from 'fs'
 import { homedir } from 'os'
-import { join } from 'path'
+import { basename, join, resolve, sep } from 'path'
 import { z } from 'zod'
 
 // ── Config ──────────────────────────────────────────────────────────────────
@@ -192,6 +192,10 @@ function chatIdFromPhone(phone: string): string {
 mkdirSync(STATE_DIR, { recursive: true, mode: 0o700 })
 mkdirSync(MEDIA_DIR, { recursive: true, mode: 0o700 })
 mkdirSync(join(STATE_DIR, 'approved'), { recursive: true, mode: 0o700 })
+
+// Resolve once at startup (after MEDIA_DIR is guaranteed to exist) so path-
+// traversal checks compare against a canonical path, not a symlink.
+const REAL_MEDIA_DIR = realpathSync(MEDIA_DIR)
 
 const db = new Database(DB_PATH)
 db.exec('PRAGMA journal_mode=WAL')
@@ -529,6 +533,34 @@ const MIME_TO_EXT: Record<string, string> = {
   'application/msword': 'doc',
 }
 
+/**
+ * Build a safe absolute write path inside MEDIA_DIR from an
+ * attacker-controlled filename (WhatsApp document captions reach
+ * here). Strips directory components, rejects dot-only and
+ * null-byte names, applies the mime-derived extension if any, and
+ * verifies the final resolved path stays under MEDIA_DIR. Throws
+ * if the resolved path escapes (defense-in-depth — basename should
+ * already prevent this).
+ */
+function safeMediaPath(
+  filename: string,
+  mediaId: string,
+  ext: string | undefined,
+): string {
+  let safe = basename(filename)
+  if (!safe || safe === '.' || safe === '..' || safe.includes('\0')) {
+    safe = ext ? `${mediaId}.${ext}` : mediaId
+  }
+  if (ext && !safe.endsWith(`.${ext}`)) {
+    safe = safe.replace(/\.[^.]+$/, '') + `.${ext}`
+  }
+  const resolved = resolve(REAL_MEDIA_DIR, safe)
+  if (!resolved.startsWith(REAL_MEDIA_DIR + sep)) {
+    throw new Error(`refusing to save outside MEDIA_DIR: ${filename}`)
+  }
+  return resolved
+}
+
 async function downloadAndSaveMedia(
   mediaId: string,
   fallbackFilename?: string,
@@ -547,16 +579,13 @@ async function downloadAndSaveMedia(
   if (!mediaRes.ok) throw new Error(`Download failed: ${mediaRes.status}`)
   const buffer = Buffer.from(await mediaRes.arrayBuffer())
 
-  // Step 3: Determine filename
-  let filename = fallbackFilename || `${mediaId}`
+  // Step 3: Sanitize filename and compute safe write path inside MEDIA_DIR
+  const fallback = fallbackFilename || `${mediaId}`
   const mimeType = urlData.mime_type || ''
   const ext = MIME_TO_EXT[mimeType]
-  if (ext && !filename.endsWith(`.${ext}`)) {
-    filename = filename.replace(/\.[^.]+$/, '') + `.${ext}`
-  }
+  const filePath = safeMediaPath(fallback, mediaId, ext)
 
-  // Step 4: Save to media directory
-  const filePath = join(MEDIA_DIR, filename)
+  // Step 4: Save
   writeFileSync(filePath, buffer)
   log(`saved media: ${filePath} (${buffer.length} bytes)`)
   return filePath
