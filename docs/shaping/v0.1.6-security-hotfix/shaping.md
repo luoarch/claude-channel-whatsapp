@@ -652,7 +652,7 @@ All 12 dimensions pass. See round-2 review output captured by `/tl`.
 | PR2 | #2 | open (review) | https://github.com/riasistemas/claude-channel-whatsapp/pull/20 |
 | PR3 | #4+#5 | draft (stacked on PR2) | https://github.com/riasistemas/claude-channel-whatsapp/pull/21 |
 | PR4 | #15 | open (review) — last v0.1.6 blocker | https://github.com/riasistemas/claude-channel-whatsapp/pull/22 |
-| PR6 | #6 | not started (optional) | — |
+| PR6 | #6 | open (review) | https://github.com/riasistemas/claude-channel-whatsapp/pull/23 |
 
 ### Hardening surfaced during PR5 (out-of-scope, deferred to v0.2.x)
 - Issue #18 — `actions/checkout@v4` runs on Node.js 20 (deprecated June 2026 default switch, removed Sept 2026). CI annotation surfaced on PR #17 run.
