@@ -187,6 +187,47 @@ function chatIdFromPhone(phone: string): string {
   return `any;-;+${digits}`
 }
 
+/**
+ * Mask common secret/PII patterns before sending text to WhatsApp.
+ * Defense-in-depth for the permission relay body — primary protection
+ * is dropping `input_preview` from the rendered body, this catches
+ * residual secrets that may leak via the `description` field that
+ * Claude generates.
+ *
+ * Order: specific token shapes first (Stripe, GitHub, AWS, etc.),
+ * then env-var assignments, then high-entropy fallback. The order
+ * matters: high-entropy would otherwise eat structured tokens.
+ *
+ * Fail-closed: if a regex throws on adversarial input (catastrophic
+ * backtrack), the error bubbles and the relay fails. Failing closed
+ * is safer than sending unsanitized — Claude's permission_request
+ * times out per its own logic and the operator sees nothing leak.
+ */
+const SECRET_PATTERNS: Array<[RegExp, string | ((m: string) => string)]> = [
+  [/sk_live_[A-Za-z0-9_]+/g, '***'],
+  [/sk_test_[A-Za-z0-9_]+/g, '***'],
+  [/pk_(live|test)_[A-Za-z0-9_]+/g, '***'],
+  [/xox[baprs]-[A-Za-z0-9-]+/g, '***'],
+  [/(ghp_|gho_|github_pat_)[A-Za-z0-9_]+/g, '***'],
+  [/AKIA[0-9A-Z]{16}/g, '***'],
+  [/Bearer\s+[A-Za-z0-9._-]+/gi, 'Bearer ***'],
+  [/sk-(ant-)?[A-Za-z0-9_-]{20,}/g, '***'],
+  [/\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/g, '***'],
+  [/\b\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\b/g, '***'],
+  [/\b[A-Z][A-Z0-9_]*=("[^"]{8,}"|'[^']{8,}'|[^\s'"`;&|]{8,})/g, (m: string) => m.split('=')[0] + '=***'],
+  [/\b[A-Za-z0-9+/=_-]{32,}\b/g, '***'],
+]
+
+function sanitizeSecrets(text: string): string {
+  let out = text
+  for (const [re, replacer] of SECRET_PATTERNS) {
+    out = typeof replacer === 'string'
+      ? out.replace(re, replacer)
+      : out.replace(re, replacer)
+  }
+  return out
+}
+
 // ── SQLite Database ─────────────────────────────────────────────────────────
 
 mkdirSync(STATE_DIR, { recursive: true, mode: 0o700 })
@@ -918,21 +959,24 @@ mcp.setNotificationHandler(
       contextLine = `⚙️ _Internal work_\n\n`
     }
 
-    // input_preview is unbearably long for Write/Edit; show only for Bash
-    // where the command itself is the dangerous part.
-    const preview = tool_name === 'Bash' ? `\n\n\`${input_preview.slice(0, 300)}\`` : ''
-    // WhatsApp interactive body limit is 1024 chars — keep it tight.
+    // Body must not leak input_preview or the derived pattern: input_preview
+    // carries the raw tool_input (commands, env-var values, secrets); pattern
+    // tokenizes Bash by whitespace and captures `STRIPE_KEY="sk_live_..."` as
+    // the literal first token. We render `description` (Claude's prose) only,
+    // and sanitizeSecrets is defense-in-depth in case `description` itself
+    // names a secret. WhatsApp interactive body limit is 1024 chars.
     const body =
       `🔐 *Permission required*\n\n` +
       contextLine +
       `🛠  *${tool_name}*\n` +
-      `📝 ${description}${preview}\n\n` +
-      `🔁 *Always* = auto-approve ${pattern} for this session\n` +
+      `📝 ${description}\n\n` +
+      `🔁 *Always* = auto-approve este tipo de solicitação\n` +
       `_ID: ${request_id}_`
     const trimmedBody = body.length > 1020 ? body.slice(0, 1017) + '...' : body
+    const safeBody = sanitizeSecrets(trimmedBody)
 
-    // 3 buttons: allow once / allow always (pattern) / deny
-    const btnResult = await sendInteractiveButtons(PERMISSION_TARGET, trimmedBody, [
+    // 3 buttons: allow once / allow always / deny
+    const btnResult = await sendInteractiveButtons(PERMISSION_TARGET, safeBody, [
       { id: `perm_allow_${request_id}`, title: '✅ Allow' },
       { id: `perm_always_${request_id}`, title: '🔁 Always' },
       { id: `perm_deny_${request_id}`, title: '❌ Deny' },
@@ -944,7 +988,7 @@ mcp.setNotificationHandler(
       `whatsapp channel: buttons failed (${btnResult.error}), falling back to text\n`,
     )
     const text =
-      `${trimmedBody}\n\n` +
+      `${safeBody}\n\n` +
       `Reply "yes ${request_id}" to allow or "no ${request_id}" to deny.`
     const txtResult = await sendText(PERMISSION_TARGET, text)
     if (!txtResult.success) {
@@ -1300,13 +1344,13 @@ async function processWebhookPayload(payload: unknown): Promise<void> {
           if (permAction && permRequestId) {
             const behavior = permAction === 'deny' ? 'deny' : 'allow'
 
-            // On "always": save the pattern for the session
-            let ackSuffix = ''
+            // On "always": save the pattern for the session. The pattern
+            // string never crosses the WhatsApp surface — it only lives in
+            // the in-memory Set used by the auto-allow check at L893.
             if (permAction === 'always') {
               const pending = pendingPermissions.get(permRequestId)
               if (pending) {
                 sessionAllowPatterns.add(pending.pattern)
-                ackSuffix = ` (${pending.pattern})`
                 log(`session-allow pattern added: ${pending.pattern}`)
               }
             }
@@ -1327,7 +1371,7 @@ async function processWebhookPayload(payload: unknown): Promise<void> {
                   : '❌'
             void sendText(
               PERMISSION_TARGET,
-              `${emoji} ${permRequestId}${ackSuffix}`,
+              `${emoji} ${permRequestId}`,
             )
             // Mark this message as stored so we don't reprocess it
             stmtInsertMsg.run(
