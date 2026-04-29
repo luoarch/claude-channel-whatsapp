@@ -22,13 +22,13 @@
 | 16 | Build scopes | ✓ | 6 ordered PRs, V1=PR5+PR1+PR2+PR3+PR4 |
 | 17 | Gate verification | ✓ | All gates pass (round 1 revisions applied) |
 | 18 | Bet | ✓ | go (Reinaldo approved 2026-04-29 PR #16; #15 redesigned) |
-| 19 | Pre-build TL | ○ | |
-| 20 | Current status | ○ | |
-| 21 | Validation evidence | ○ | |
-| 22 | Gate verification (live) | ○ | |
-| 23 | Close summary | ○ | |
-| 24 | Write-back | ○ | |
-| 25 | Post-build TL | ○ | |
+| 19 | Pre-build TL | ✓ | APPROVE round 2 (post-hoc from /tl standalone, Bet=go gate met) |
+| 20 | Current status | ◐ | PR5 open (#17); 5 PRs remaining |
+| 21 | Validation evidence | ◐ | per-PR evidence in PR descriptions |
+| 22 | Gate verification (live) | ◐ | PR5 gates pass (typecheck + frozen-install + drift probe) |
+| 23 | Close summary | ○ | filled when all 6 PRs merge |
+| 24 | Write-back | ○ | filled at release tag |
+| 25 | Post-build TL | ○ | invoked at release tag |
 
 **Legend:** `○` not started · `◐` in progress · `✓` complete
 
@@ -628,9 +628,37 @@ Round-1 audit added R6 (3-button limit) under the assumption PR4 needed a 4th "S
 
 ---
 
-## §19–25
+## §19 Pre-build TL review
 
-Pending `/build` (post-bet). Will be filled by `/build` and `/tl` skills.
+### Anchor
+- decision: APPROVE
+- mode: pre-build (post-hoc — `/tl` ran in standalone mode 2026-04-29 because Bet=go was not yet recorded; functional equivalence to pre-build review)
+- shaping_commit_sha: c627d82 (head of `shaping/v0.1.6-security-hotfix` after Reinaldo's #15 redesign)
+- timestamp: 2026-04-29
+- challenge_rounds_used: 2 (round 1 BLOCK with C1–C10; round 2 APPROVE after revisions)
+- approver: tl-auto via `/tl` standalone
+- conditions_ledger_entries: []
+- tpg_audit: unavailable-fallback-native
+
+### Audit (round 2 — final)
+All 12 dimensions pass. See round-2 review output captured by `/tl`.
+
+## §20 Current status
+
+| PR | Issue | Status | URL |
+|---|---|---|---|
+| PR5 | #3 | open (review) | https://github.com/riasistemas/claude-channel-whatsapp/pull/17 |
+| PR1 | #1 | not started | — |
+| PR2 | #2 | not started | — |
+| PR3 | #4+#5 | not started | — |
+| PR4 | #15 | not started | — |
+| PR6 | #6 | not started (optional) | — |
+
+Hill chart: PR5 is downhill (implementation done, gate verification done; awaiting Reinaldo merge review).
+
+## §21–25
+
+Per-PR validation evidence lives in each PR's description (PR5: see #17 body — clean install, frozen-install, drift probe, typecheck output). Consolidated §22 gate matrix, §23 close summary, §24 write-back, and §25 post-build TL audit are filled when all 6 PRs land and `v0.1.6` tag is cut.
 
 ---
 
