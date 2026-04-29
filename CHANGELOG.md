@@ -4,6 +4,75 @@ All notable changes to this plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.6] — 2026-04-29
+
+Security hotfix release. Closes the v0.1.6 blockers from the external
+security review on 2026-04-27 (issues #1–#5, #15) plus one hardening
+follow-up (#6). See PR #16 for the program shape.
+
+### Security
+
+- **#1 / PR #19** — `uploadMedia` no longer shells out to `curl` via
+  `execSync`. Replaced with native `fetch` + `Bun.file` + `FormData`.
+  Two leaks closed: command injection through shell-concatenated file
+  paths, and `WHATSAPP_ACCESS_TOKEN` exposure in `argv` (visible to
+  any process running `ps -ef`).
+- **#2 / PR #20** — WhatsApp document filenames are now sanitized
+  before write. `path.basename` strips traversal components; null
+  bytes / dot-only / empty names fall back to `${mediaId}.${ext}`;
+  resolved path is asserted under `realpathSync(MEDIA_DIR)`. Closes
+  arbitrary FS write via `[Document: ../../.ssh/authorized_keys]`.
+- **#4 / PR #21** — Outbound `reply` and `react` now call
+  `assertSendablePhone(phone)` at handler entry. Accepts only
+  `SELF_PHONE`, entries in `access.allowFrom`, or chats that messaged
+  us within the last 600s (aligned with `lastInboundByChat`
+  eviction). The previously-empty `if (!allowed && ...) {}` block is
+  gone.
+- **#5 / PR #21** — `reply.files` paths now pass through
+  `assertSendable(f)` (canonical pattern from
+  `anthropics/claude-plugins-official` telegram L131-145 / imessage
+  L225-239). Blocks paths under `STATE_DIR` from being shipped as
+  documents; `STATE_DIR/media` is carved out so re-forwarding inbound
+  media still works.
+- **#15 / PR #22** — Permission relay body no longer renders
+  `input_preview` (which carried the raw `tool_input` JSON for Bash,
+  including secrets in env-var assignments) or the
+  `permissionPattern` literal (which captured
+  `STRIPE_KEY="sk_live_..."` as the first token via whitespace
+  tokenization). Body now shows `description` (Claude's prose) only,
+  with a generic `🔁 *Always* = auto-approve este tipo de
+  solicitação` line. A new `sanitizeSecrets` helper masks 12
+  secret/PII pattern families (Stripe, GitHub, AWS, Slack, Bearer,
+  Anthropic, env-var assignments, high-entropy fallback, CPF, CNPJ)
+  before send. Defense-in-depth in case `description` itself names
+  a secret. Fail-closed if a regex throws on adversarial input.
+- **#6 / PR #23** — `activeTask` now expires 5 minutes after the
+  inbound message that set it. Permission attribution (`👤 During
+  conversation with X`) was previously sticky until the next `reply`
+  for the same phone — a `permission_request` arriving an hour later
+  was still attributed to the original conversation. After expiry,
+  attribution falls back to `⚙️ Internal work`. A 60s `setInterval`
+  cleans up the stale entry.
+
+### Changed
+
+- **#3 / PR #17** — `bun.lock` is now committed. The `start` script
+  uses `bun install --frozen-lockfile --no-summary`, and CI's
+  pre-existing `--frozen-lockfile` step now actually enforces (it
+  was a no-op while the lockfile was gitignored). Caret-ranged deps
+  (`@modelcontextprotocol/sdk ^1.0.0`, `zod ^3.23.8`,
+  `@types/bun ^1.3.10`) are now pinned via the lockfile; updates
+  go through `bun update` + commit.
+
+### Notes
+
+- Existing in-memory `sessionAllowPatterns` ("Always" approvals)
+  invalidate on plugin restart due to PR #22 — same restart
+  semantics as before, just one extra reload right after upgrade.
+  Re-tap "🔁 Always" once and the new pattern is back.
+- `actions/checkout@v4` Node 20 deprecation surfaced as a warning
+  on CI runs and is tracked in #18 for a v0.2.x bump.
+
 ## [0.1.5] — 2026-04-26
 
 ### Fixed
