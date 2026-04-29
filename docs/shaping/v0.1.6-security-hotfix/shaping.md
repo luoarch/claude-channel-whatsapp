@@ -23,9 +23,9 @@
 | 17 | Gate verification | ✓ | All gates pass (round 1 revisions applied) |
 | 18 | Bet | ✓ | go (Reinaldo approved 2026-04-29 PR #16; #15 redesigned) |
 | 19 | Pre-build TL | ✓ | APPROVE round 2 (post-hoc from /tl standalone, Bet=go gate met) |
-| 20 | Current status | ◐ | PR5 open (#17); 5 PRs remaining |
+| 20 | Current status | ◐ | PR5 merged (#17, sha 3293bee on main); 5 PRs remaining |
 | 21 | Validation evidence | ◐ | per-PR evidence in PR descriptions |
-| 22 | Gate verification (live) | ◐ | PR5 gates pass (typecheck + frozen-install + drift probe) |
+| 22 | Gate verification (live) | ◐ | PR5 ✓ (typecheck + frozen-install + drift probe) |
 | 23 | Close summary | ○ | filled when all 6 PRs merge |
 | 24 | Write-back | ○ | filled at release tag |
 | 25 | Post-build TL | ○ | invoked at release tag |
@@ -647,12 +647,15 @@ All 12 dimensions pass. See round-2 review output captured by `/tl`.
 
 | PR | Issue | Status | URL |
 |---|---|---|---|
-| PR5 | #3 | open (review) | https://github.com/riasistemas/claude-channel-whatsapp/pull/17 |
-| PR1 | #1 | not started | — |
+| PR5 | #3 | **merged** (sha 3293bee) | https://github.com/riasistemas/claude-channel-whatsapp/pull/17 |
+| PR1 | #1 | next | — |
 | PR2 | #2 | not started | — |
 | PR3 | #4+#5 | not started | — |
 | PR4 | #15 | not started | — |
 | PR6 | #6 | not started (optional) | — |
+
+### Hardening surfaced during PR5 (out-of-scope, deferred to v0.2.x)
+- Issue #18 — `actions/checkout@v4` runs on Node.js 20 (deprecated June 2026 default switch, removed Sept 2026). CI annotation surfaced on PR #17 run.
 
 Hill chart: PR5 is downhill (implementation done, gate verification done; awaiting Reinaldo merge review).
 
