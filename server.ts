@@ -237,6 +237,7 @@ mkdirSync(join(STATE_DIR, 'approved'), { recursive: true, mode: 0o700 })
 // Resolve once at startup (after MEDIA_DIR is guaranteed to exist) so path-
 // traversal checks compare against a canonical path, not a symlink.
 const REAL_MEDIA_DIR = realpathSync(MEDIA_DIR)
+const REAL_STATE_DIR = realpathSync(STATE_DIR)
 
 const db = new Database(DB_PATH)
 db.exec('PRAGMA journal_mode=WAL')
@@ -600,6 +601,55 @@ function safeMediaPath(
     throw new Error(`refusing to save outside MEDIA_DIR: ${filename}`)
   }
   return resolved
+}
+
+/**
+ * Reject outbound destinations not in our trust set. WhatsApp's reply.chat_id
+ * is a free-form parameter — without this gate, a prompt-injected Claude can
+ * send to any phone it picks. Three accepted sources of trust:
+ * - the WABA's own number (self)
+ * - operator-curated allowlist (access.allowFrom)
+ * - phones that recently messaged us within the lastInboundByChat window
+ *   (600s; aligned with the existing eviction at the inbound handler)
+ *
+ * No mode asymmetry between reply and react — same gate for both.
+ */
+function assertSendablePhone(phone: string): void {
+  const target = normalizePhone(phone)
+  if (target && SELF_PHONE && target === SELF_PHONE) return
+  const access = loadAccess()
+  if (access.allowFrom.some((a) => phonesMatch(a, phone))) return
+  const cid = chatIdFromPhone(phone)
+  const rec = lastInboundByChat.get(cid)
+  if (rec) {
+    const now = Math.floor(Date.now() / 1000)
+    if ((now - rec.ts) <= 600) return
+  }
+  throw new Error(`not in outbound allowlist: ${phone}`)
+}
+
+/**
+ * Reject sending the server's own state as a file attachment. Mirrors the
+ * canonical pattern from anthropics/claude-plugins-official telegram
+ * (server.ts:135-145) and imessage (server.ts:225-239). Claude can already
+ * Read+paste arbitrary file contents, so this isn't a generic exfil gate —
+ * it only protects channel state (access.json, lockfile, db, etc.) which
+ * Claude has no reason to ever forward. STATE_DIR/media is carved out
+ * because re-forwarding inbound media is a legitimate flow.
+ */
+function assertSendable(f: string): void {
+  let real: string
+  try {
+    real = realpathSync(f)
+  } catch {
+    return // statSync downstream will surface a real error
+  }
+  if (
+    real.startsWith(REAL_STATE_DIR + sep) &&
+    !real.startsWith(REAL_MEDIA_DIR + sep)
+  ) {
+    throw new Error(`refusing to send channel state: ${f}`)
+  }
 }
 
 async function downloadAndSaveMedia(
@@ -1102,16 +1152,7 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
         const files = (args.files as string[] | undefined) ?? []
         const phone = phoneFromChatId(chatId)
 
-        // Check access
-        const access = loadAccess()
-        const allowed =
-          normalizePhone(phone) === SELF_PHONE ||
-          access.allowFrom.some(
-            (a) => normalizePhone(a) === normalizePhone(phone),
-          )
-        if (!allowed && access.dmPolicy !== 'disabled') {
-          // Allow reply to anyone who messaged us (they're in the conversation)
-        }
+        assertSendablePhone(phone)
 
         // Send text chunks
         const chunks = chunkText(text)
@@ -1151,6 +1192,7 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
           mp4: 'video/mp4',
         }
         for (const filePath of files) {
+          assertSendable(filePath)
           const ext = filePath.split('.').pop()?.toLowerCase() || ''
           const mime = mimeMap[ext] || 'application/octet-stream'
           const mediaId = await uploadMedia(filePath, mime)
@@ -1200,6 +1242,7 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
         const messageId = args.message_id as string
         const emoji = args.emoji as string
         const phone = phoneFromChatId(chatId)
+        assertSendablePhone(phone)
         const result = await sendReaction(phone, messageId, emoji)
         if (!result.success) {
           return {
