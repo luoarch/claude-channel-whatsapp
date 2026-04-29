@@ -24,13 +24,13 @@ This is a **sub-shape** of the v0.1.6 program. Inherits monorepo scan, cutover, 
 | 16 | Build scopes | ✓ | single scope; lives entirely in PR4 |
 | 17 | Gate verification | ✓ | passes |
 | 18 | Bet | ✓ | go (inherits parent §18 go; this sub-shape locks impl details) |
-| 19 | Pre-build TL | ○ | |
-| 20 | Current status | ○ | |
-| 21 | Validation evidence | ○ | |
-| 22 | Gate verification (live) | ○ | |
-| 23 | Close summary | ○ | |
-| 24 | Write-back | ○ | |
-| 25 | Post-build TL | ○ | |
+| 19 | Pre-build TL | ✓ | APPROVE inherited from parent §19 + sub-shape gates pass |
+| 20 | Current status | ◐ | PR #22 open, CI green; awaiting Reinaldo merge + 5-type live probe |
+| 21 | Validation evidence | ✓ | render-body-fixture 21/21; sanitize-fixture 18/18 |
+| 22 | Gate verification (live) | ✓ | typecheck + grep audits pass |
+| 23 | Close summary | ○ | filled at PR merge |
+| 24 | Write-back | ○ | filled at PR merge |
+| 25 | Post-build TL | ○ | invoked at PR merge |
 
 **Legend:** `○` not started · `◐` in progress · `✓` complete
 
@@ -374,5 +374,42 @@ All gates pass.
 
 ---
 
-## §19–25
-Filled by `/build` and `/tl` post-handoff.
+## §19 Pre-build TL review
+
+### Anchor
+- decision: APPROVE
+- mode: pre-build (inherited from parent §19; sub-shape ratifies)
+- shaping_commit_sha: e29397e (sub-shape commit)
+- timestamp: 2026-04-29
+- challenge_rounds_used: 0 (sub-shape inherits parent's round-2 APPROVE; no new product decisions surfaced)
+- approver: tl-auto (parent inheritance)
+- conditions_ledger_entries: []
+- tpg_audit: unavailable-fallback-native (no `bun:test` harness; spike-script evidence)
+
+## §20 Current status
+
+PR #22 open against `riasistemas/claude-channel-whatsapp:main`. Branch `fix/15-permission-body-sanitizer` from `luoarch` fork, commit `5d44c7c`. CI ✓ green (typecheck). Hill chart: downhill — implementation done, gates pass, awaiting Reinaldo merge review + 5-type live probe (PR body has the checklist).
+
+## §21 Validation evidence
+
+- `spikes/sanitize-fixture.ts` — 18/18 sanitizer cases pass (12 positive + 6 negative).
+- `spikes/render-body-fixture.ts` — 21/21 body-render assertions pass: input_preview/tool_input absent from body; pattern literal absent; "Always" line is the generic phrase; tool_name/contextLine/description preserved; sanitizer masks all 9 representative secret shapes; benign body unchanged; body length within 1024.
+- Grep audits captured in PR #22 description.
+
+## §22 Gate verification (live)
+
+- SSOT: pass — N/A (no shared package).
+- Single-path: pass — full replacement, no flag, no compat.
+- Type safety: pass — `SECRET_PATTERNS: Array<[RegExp, string | ((m: string) => string)]>`; `sanitizeSecrets(text: string): string`; no `any`.
+- Security/AuthZ: pass — entire change is the security fix.
+- Data: pass (N/A, in-memory only).
+- Resilience: pass — fail-closed documented in `sanitizeSecrets` JSDoc.
+- Observability: pass — outcome metric = body grep audit + Reinaldo's manual probe; no new metric required.
+- Platform: pass — no infra change.
+- Governance: pass — owner = Reinaldo.
+- Monorepo coherence: pass — single file (server.ts); no SSOT package.
+- Test pyramid: pass — `[static, unit (fixture-script), manual probe at review]` per sub-shape §16, all delivered.
+- Appetite fit: pass — implementation ~57 LOC net, well inside 1.5-day box.
+
+## §23–25
+§23 Close summary, §24 Write-back, §25 Post-build TL — filled at PR #22 merge.

@@ -648,10 +648,10 @@ All 12 dimensions pass. See round-2 review output captured by `/tl`.
 | PR | Issue | Status | URL |
 |---|---|---|---|
 | PR5 | #3 | **merged** (sha 3293bee) | https://github.com/riasistemas/claude-channel-whatsapp/pull/17 |
-| PR1 | #1 | next | — |
-| PR2 | #2 | not started | — |
-| PR3 | #4+#5 | not started | — |
-| PR4 | #15 | not started | — |
+| PR1 | #1 | open (review) | https://github.com/riasistemas/claude-channel-whatsapp/pull/19 |
+| PR2 | #2 | open (review) | https://github.com/riasistemas/claude-channel-whatsapp/pull/20 |
+| PR3 | #4+#5 | draft (stacked on PR2) | https://github.com/riasistemas/claude-channel-whatsapp/pull/21 |
+| PR4 | #15 | open (review) — last v0.1.6 blocker | https://github.com/riasistemas/claude-channel-whatsapp/pull/22 |
 | PR6 | #6 | not started (optional) | — |
 
 ### Hardening surfaced during PR5 (out-of-scope, deferred to v0.2.x)
